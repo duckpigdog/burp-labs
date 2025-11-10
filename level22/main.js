@@ -145,55 +145,7 @@ function hideLoginModal() {
     }
 }
 
-// 处理登录
-function handleLogin(username, password) {
-    // 检查是否在第22关
-    const isLevel22 = window.location.pathname.includes('level22');
-    
-    if (isLevel22) {
-        // 第22关使用PHP后端
-        fetch('login.php', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ username, password })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showNotification('登录成功！', 'success');
-                localStorage.setItem('currentUser', JSON.stringify(data.user));
-                setTimeout(() => {
-                    // 跳转到管理后台
-                    window.location.href = 'admin.html';
-                }, 1500);
-            } else {
-                showNotification(data.message, 'error');
-            }
-        })
-        .catch(error => {
-            console.error('登录错误:', error);
-            showNotification('登录失败，请重试', 'error');
-        });
-    } else {
-        // 原有逻辑保持不变
-        const user = users.find(u => u.name === name && u.phone === phone);
-        if (user) {
-            showNotification('登录成功！', 'success');
-            localStorage.setItem('currentUser', JSON.stringify(user));
-            setTimeout(() => {
-                if (user.name === 'admin') {
-                    window.location.href = 'admin.html';
-                } else {
-                    hideLoginModal();
-                }
-            }, 1500);
-        } else {
-            showNotification('用户名或手机号错误！', 'error');
-        }
-    }
-}
+
 
 // 显示用户菜单
 function showUserMenu() {
@@ -450,6 +402,31 @@ const systemData = {
     newCustomers: [8, 12, 15, 18, 14, 22, 25, 19, 16, 20, 13, 17]
 };
 
+// 添加登录状态管理函数
+// 添加登录状态管理函数
+function updateLoginStatus(isLoggedIn) {
+    const loginButtons = document.querySelectorAll('[onclick*="showLoginModal"]');
+    
+    if (isLoggedIn) {
+        loginButtons.forEach(btn => {
+            btn.textContent = '管理后台';
+            btn.onclick = function() {
+                window.location.href = 'admin.php';  // 确保这里是 admin.php
+            };
+            // 移除原有的事件监听器（如果有的话）
+            btn.setAttribute('onclick', 'window.location.href="admin.php"');
+        });
+    } else {
+        loginButtons.forEach(btn => {
+            btn.textContent = '登录';
+            btn.onclick = showLoginModal;
+            btn.setAttribute('onclick', 'showLoginModal()');
+        });
+    }
+}
+
+
+
 // 导出数据供其他页面使用
 window.products = products;
 window.customers = customers;
@@ -466,17 +443,68 @@ window.logout = logout;
 
 // 登录表单提交处理
 document.addEventListener('DOMContentLoaded', function() {
+    // 检查登录状态
+    checkLoginStatus();
+        // 初始化登录表单
     const loginForm = document.getElementById('loginForm');
     if (loginForm) {
         loginForm.addEventListener('submit', function(e) {
             e.preventDefault();
-            handleLogin();
+            handleLogin(e);  // 传递事件对象
         });
     }
 });
 
+// 检查登录状态
+function checkLoginStatus() {
+    fetch('check_login.php')
+        .then(response => response.json())
+        .then(data => {
+            if (data.logged_in) {
+                updateLoginStatus(true);
+            } else {
+                updateLoginStatus(false);
+            }
+        })
+        .catch(error => {
+            console.error('检查登录状态失败:', error);
+            updateLoginStatus(false);
+        });
+}
+
+
+function handleLoginSuccess(userData) {
+    // 显示成功消息
+    showNotification('登录成功！', 'success');
+    
+    // 隐藏登录模态框
+    hideLoginModal();
+    
+    // 更新登录状态
+    updateLoginStatus(true);
+    
+    // 可以在这里添加跳转到管理页面的逻辑
+    // 如果当前在首页，可以显示管理后台按钮
+    console.log('用户登录成功:', userData);
+}
+
+
+function handleLoginError(message) {
+    showNotification(message || '登录失败，请检查账号密码！', 'error');
+    
+    // 重置登录按钮状态
+    const loginBtn = document.querySelector('#loginForm button[type="submit"]');
+    if (loginBtn) {
+        loginBtn.disabled = false;
+        loginBtn.innerHTML = '登录';
+    }
+}
+
+
 // 登录处理函数
-function handleLogin() {
+function handleLogin(e) {
+    if (e) e.preventDefault();
+    
     const username = document.getElementById('username').value;
     const password = document.getElementById('password').value;
     
@@ -484,6 +512,13 @@ function handleLogin() {
     if (!username || !password) {
         showNotification('请输入账号和密码', 'error');
         return;
+    }
+    
+    // 禁用登录按钮防止重复提交
+    const loginBtn = document.querySelector('#loginForm button[type="submit"]');
+    if (loginBtn) {
+        loginBtn.disabled = true;
+        loginBtn.innerHTML = '登录中...';
     }
     
     // 发送登录请求
@@ -504,10 +539,13 @@ function handleLogin() {
             localStorage.setItem('currentUser', JSON.stringify(data.user));
             hideLoginModal();
             
+            // 更新登录状态
+            updateLoginStatus(true);
+            
             // 如果是管理员，跳转到管理页面
             if (username === 'admin') {
                 setTimeout(() => {
-                    window.location.href = 'admin.html';
+                    window.location.href = 'admin.php';
                 }, 1000);
             }
         } else {
@@ -517,5 +555,12 @@ function handleLogin() {
     .catch(error => {
         console.error('登录错误:', error);
         showNotification('网络错误，请重试', 'error');
+    })
+    .finally(() => {
+        // 重新启用登录按钮
+        if (loginBtn) {
+            loginBtn.disabled = false;
+            loginBtn.innerHTML = '登录';
+        }
     });
 }
